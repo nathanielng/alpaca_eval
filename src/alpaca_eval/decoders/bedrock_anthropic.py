@@ -20,7 +20,7 @@ DEFAULT_NUM_PROCS = 3
 def bedrock_anthropic_completions(
     prompts: Sequence[str],
     max_tokens_to_sample: Union[int, Sequence[int]] = 2048,
-    model_name: str = "anthropic.claude-v1",
+    model_name: str = "anthropic.claude-3-sonnet-20240229-v1:0",
     num_procs: int = DEFAULT_NUM_PROCS,
     **decoding_kwargs,
 ) -> dict[str, list]:
@@ -89,7 +89,7 @@ def _bedrock_anthropic_completion_helper(
     args: tuple[str, int],
     sleep_time: int = 2,
     region: Optional[str] = "us-west-2",
-    model_name: str = "anthropic.claude-v1",
+    model_name: str = "anthropic.claude-3-sonnet-20240229-v1:0",
     temperature: Optional[float] = 0.7,
     **kwargs,
 ):
@@ -102,21 +102,38 @@ def _bedrock_anthropic_completion_helper(
     accept = "application/json"
     contentType = "application/json"
 
-    kwargs.update(dict(max_tokens_to_sample=max_tokens, temperature=temperature))
+    kwargs.update(dict(max_tokens=max_tokens, temperature=temperature))
     curr_kwargs = copy.deepcopy(kwargs)
     while True:
         try:
-            body = json.dumps({**{"prompt": prompt}, **curr_kwargs})
+            messages = {
+              "role": "user",
+              "content": [
+                  {
+                    "type": "text",
+                    "text": prompt
+                  }
+              ]
+            }
+            body = json.dumps({**{
+                "messages": [ messages ],
+                "anthropic_version": "bedrock-2023-05-31"
+            }, **curr_kwargs})
             response = bedrock.invoke_model(body=body, modelId=model_name, accept=accept, contentType=contentType)
-            response = json.loads(response.get("body").read()).get("completion")
+            response_body = json.loads(response.get("body").read())
+            content = response_body.get("content", [])
+            completion = [ c['text'] for c in content if c['type'] == 'text' ]
+            response = '\n'.join(completion)
             break
         except botocore.exceptions.ClientError as e:
             if e.response["Error"]["Code"] == "ThrottlingException":
                 logging.warning(f"Hit throttling error: {e}.")
                 logging.warning(f"Rate limit hit. Sleeping for {sleep_time} seconds.")
                 time.sleep(sleep_time)
+            else:
+                return f"ERROR - botocore.exceptions.ClientError as e: {e}"
         except Exception as e:
             logging.error(f"Hit unknown error : {e}")
-            raise e
+            return f"ERROR - Exception as e: {e}"
 
     return response
