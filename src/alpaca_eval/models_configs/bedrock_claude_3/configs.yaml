@@ -1,0 +1,7 @@
+bedrock_claude_3:
+  prompt_template: "claude/prompt.txt"
+  fn_completions: "bedrock_anthropic_completions"
+  completions_kwargs:
+    model_name: "anthropic.claude-3-sonnet-20240229-v1:0"
+    max_tokens_to_sample: 2048
+  pretty_name: "Bedrock Claude 3"
